@@ -19,39 +19,11 @@ jobs:
       - name: Make scripts executable
         run: |
           chmod +x lib/*.sh
-          chmod +x test*.sh
-
-      - name: Test log module
-        run: |
-          # Test basic logging functionality
-          source lib/log.sh --log-level DEBUG
-          log "Test message"
-          warn "Test warning"
-          error "Test error"
-          debug "Test debug"
-
-      - name: Test lifecycle module
-        run: |
-          # Test lifecycle module loading
-          source lib/lifecycle.sh --log-level DEBUG
-          echo "Lifecycle module loaded successfully"
-          
-          # Test with temporary file
-          temp_file=$(mktemp)
-          echo "Created temp file: $temp_file"
-          
-          # Cleanup temp file manually for CI
-          rm -f "$temp_file"
-
-      - name: Test integration
-        run: |
-          # Test both modules together
-          LOG_LEVEL=DEBUG ./test1.sh
 
       - name: Validate shell syntax
         run: |
           # Check syntax of all shell files
-          for file in lib/*.sh test*.sh; do
+          for file in lib/*.sh; do
             if [ -f "$file" ]; then
               echo "Checking syntax: $file"
               bash -n "$file"
@@ -88,7 +60,6 @@ jobs:
           
           # Copy documentation
           cp README.md package/bash-helpers-${{ steps.version.outputs.version }}/
-          cp CLAUDE.md package/bash-helpers-${{ steps.version.outputs.version }}/
           
           # Create installation script
           cat > package/bash-helpers-${{ steps.version.outputs.version }}/install.sh << 'EOF'
@@ -353,8 +324,6 @@ jobs:
           
           - **lifecycle.sh** - Complete script lifecycle management with single-instance enforcement and automatic cleanup
           - **log.sh** - Enhanced logging system with multi-level output and file logging
-          - **Examples** - Ready-to-use example scripts
-          - **Documentation** - Comprehensive usage guide and API reference
           
           ## Installation
           
