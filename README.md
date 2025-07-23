@@ -1,6 +1,49 @@
 # Bash Helpers Library
 
+[![CI](https://github.com/your-username/bash-helpers/workflows/CI/badge.svg)](https://github.com/your-username/bash-helpers/actions)
+[![Package](https://github.com/your-username/bash-helpers/workflows/Build%20and%20Release%20Bash%20Helpers%20Package/badge.svg)](https://github.com/your-username/bash-helpers/actions)
+[![Release](https://img.shields.io/github/v/release/your-username/bash-helpers)](https://github.com/your-username/bash-helpers/releases)
+
 A collection of reusable Bash modules designed for robust script development with modern practices, comprehensive logging, and reliable resource management.
+
+## Installation
+
+### Quick Installation (Recommended)
+
+Download and install the latest release:
+
+```bash
+# Download latest release
+curl -L https://github.com/your-username/bash-helpers/releases/latest/download/bash-helpers-latest.tar.gz | tar -xz
+
+# Install to ~/.local/lib/bash-helpers
+cd bash-helpers-*/
+./install.sh
+
+# Or install to custom location
+./install.sh /opt/bash-helpers
+```
+
+### Manual Installation
+
+Clone the repository and copy the library files:
+
+```bash
+git clone https://github.com/your-username/bash-helpers.git
+cd bash-helpers
+cp -r lib ~/.local/lib/bash-helpers
+```
+
+### Verification
+
+Test your installation:
+
+```bash
+# Test basic functionality
+source ~/.local/lib/bash-helpers/lifecycle.sh
+ensure_single_instance
+log "Installation successful!"
+```
 
 ## Overview
 

@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-20.04]
+        
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x lib/*.sh
+          chmod +x test*.sh
+
+      - name: Test log module standalone
+        run: |
+          echo "=== Testing log module ==="
+          source lib/log.sh --log-level DEBUG
+          log "Test message"
+          warn "Test warning" 
+          error "Test error"
+          debug "Test debug"
+
+      - name: Test lifecycle module standalone  
+        run: |
+          echo "=== Testing lifecycle module ==="
+          source lib/lifecycle.sh --log-level DEBUG
+          echo "Lifecycle module loaded successfully"
+
+      - name: Test modules integration
+        run: |
+          echo "=== Testing module integration ==="
+          LOG_LEVEL=DEBUG ./test1.sh
+
+      - name: Test single instance enforcement
+        run: |
+          echo "=== Testing single instance enforcement ==="
+          timeout 5s ./test_single_instance.sh &
+          sleep 1
+          
+          # This should fail because another instance is running
+          if ./test_single_instance.sh 2>&1 | grep -q "Lock file is present"; then
+            echo "✓ Single instance enforcement working correctly"
+          else
+            echo "✗ Single instance enforcement failed"
+            exit 1
+          fi
+          
+          # Wait for first instance to complete
+          wait
+
+      - name: Validate shell syntax
+        run: |
+          echo "=== Validating shell syntax ==="
+          for file in lib/*.sh test*.sh; do
+            if [ -f "$file" ]; then
+              echo "Checking syntax: $file"
+              bash -n "$file" || exit 1
+            fi
+          done
+
+      - name: Test different configurations
+        run: |
+          echo "=== Testing different configurations ==="
+          
+          # Test quiet mode
+          echo "Testing quiet mode..."
+          source lib/log.sh --be-quiet
+          log "This should not appear"
+          
+          # Test verbose mode
+          echo "Testing verbose mode..."
+          source lib/log.sh --be-verbose
+          debug "This should appear in verbose mode"
+          
+          # Test custom lock file
+          echo "Testing custom lock file..."
+          source lib/lifecycle.sh --lock-file /tmp/custom-test.lock
+          echo "Custom lock file configuration loaded"
+
+  lint:
+    name: Shell Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck
+        run: |
+          echo "=== Running ShellCheck ==="
+          for file in lib/*.sh test*.sh; do
+            if [ -f "$file" ]; then
+              echo "Linting: $file"
+              # Use relaxed rules for these helper modules
+              shellcheck -e SC1090,SC1091,SC2034 "$file" || exit 1
+            fi
+          done
