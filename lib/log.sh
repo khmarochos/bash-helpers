@@ -104,7 +104,7 @@ fi
 #     Note: Environment variables take precedence over script defaults
 #
 
-# Core logging configuration
+# Core logging configuration (can be overridden by config.sh)
 LOG_FILE="${LOG_FILE:-}"                              # Path to log file (empty = no file logging)
 LOG_TIME_FORMAT="${LOG_TIME_FORMAT:-"+%Y-%m-%d %H:%M:%S"}"  # Timestamp format for log entries
 LOG_LEVEL="${LOG_LEVEL:-INFO}"                        # Minimum log level: DEBUG, INFO, WARN, ERROR
@@ -113,6 +113,165 @@ LOG_LEVEL="${LOG_LEVEL:-INFO}"                        # Minimum log level: DEBUG
 BE_QUIET=${BE_QUIET:-0}                               # Suppress console output: 1=quiet, 0=normal
 BE_VERBOSE=${BE_VERBOSE:-0}                           # Enable verbose output: 1=verbose, 0=normal
                                                       # Note: BE_VERBOSE=1 automatically sets LOG_LEVEL=DEBUG
+
+# Apply verbose mode logic
+if [[ "${BE_VERBOSE}" == "1" ]]; then
+    LOG_LEVEL="DEBUG"
+fi
+
+# Configuration integration flag
+LOG_CONFIG_LOADED="${LOG_CONFIG_LOADED:-0}"           # Whether config.sh integration has been loaded
+
+#
+# Configuration Integration Functions
+#
+
+# _load_config_module() - Load config.sh module if available
+#
+# Description:
+#   Attempts to load the config.sh module for configuration integration.
+#   This function is called automatically by load_log_config().
+#
+# Returns:
+#   0 if config module is loaded or already available
+#   1 if config module cannot be found
+#
+# Global variables used:
+#   CONFIG_MODULE_LOADED - Set by config.sh module when loaded
+#
+_load_config_module() {
+    # Check if config module is already loaded
+    if [[ "${CONFIG_MODULE_LOADED:-0}" == "1" ]]; then
+        return 0
+    fi
+    
+    # Determine library directory relative to this script
+    local lib_dir
+    lib_dir="$(dirname "$(readlink -f "${BASH_SOURCE[1]}")")"
+    
+    # Path to the config module
+    local config_module_path="${lib_dir}/config.sh"
+    
+    # Check if config module exists and source it
+    if [[ -f "${config_module_path}" ]]; then
+        source "${config_module_path}"
+        return 0
+    else
+        # Config module not available, continue without it
+        return 1
+    fi
+}
+
+# load_log_config() - Load logging configuration from config.sh
+#
+# Description:
+#   Integrates with config.sh to load logging parameters from configuration
+#   files, environment variables, and command-line arguments. This provides
+#   a unified configuration approach across all modules.
+#
+# Configuration keys supported:
+#   logging.file           - Log file path (LOG_FILE)
+#   logging.level          - Log level (LOG_LEVEL) 
+#   logging.time_format    - Timestamp format (LOG_TIME_FORMAT)
+#   logging.quiet          - Quiet mode (BE_QUIET)
+#   logging.verbose        - Verbose mode (BE_VERBOSE)
+#   logging.console        - Enable console output (opposite of quiet)
+#
+# Returns:
+#   0 on success, 1 if config module not available
+#
+# Examples:
+#   load_log_config                    # Load from current config
+#   load_config "app.conf"; load_log_config  # Load config then apply to logging
+#
+load_log_config() {
+    local config_value
+    
+    # Skip if already loaded unless forced reload
+    if [[ "${LOG_CONFIG_LOADED}" == "1" ]]; then
+        debug "Log configuration already loaded from config.sh (use reload_log_config to force reload)"
+        return 0
+    fi
+    
+    # Try to load config module
+    if ! _load_config_module; then
+        debug "Config module not available, using environment/direct configuration"
+        return 1
+    fi
+    
+    debug "Loading logging configuration from config.sh"
+    
+    # Load logging configuration values with fallbacks to current values
+    
+    # Log file path
+    config_value="$(get_config "logging.file" "" 2>/dev/null)" || config_value=""
+    if [[ -n "${config_value}" ]]; then
+        LOG_FILE="${config_value}"
+        debug "Set LOG_FILE from config: ${LOG_FILE}"
+    fi
+    
+    # Log level
+    config_value="$(get_config "logging.level" "" 2>/dev/null)" || config_value=""
+    if [[ -n "${config_value}" ]]; then
+        LOG_LEVEL="${config_value^^}"
+        debug "Set LOG_LEVEL from config: ${LOG_LEVEL}"
+    fi
+    
+    # Time format
+    config_value="$(get_config "logging.time_format" "" 2>/dev/null)" || config_value=""
+    if [[ -n "${config_value}" ]]; then
+        LOG_TIME_FORMAT="${config_value}"
+        debug "Set LOG_TIME_FORMAT from config: ${LOG_TIME_FORMAT}"
+    fi
+    
+    # Quiet mode
+    config_value="$(get_config "logging.quiet" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") BE_QUIET=1; debug "Enabled quiet mode from config" ;;
+        "false") BE_QUIET=0; debug "Disabled quiet mode from config" ;;
+    esac
+    
+    # Verbose mode
+    config_value="$(get_config "logging.verbose" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") 
+            BE_VERBOSE=1
+            LOG_LEVEL="DEBUG"
+            debug "Enabled verbose mode from config"
+            ;;
+        "false") 
+            BE_VERBOSE=0
+            debug "Disabled verbose mode from config"
+            ;;
+    esac
+    
+    # Console output (opposite of quiet)
+    config_value="$(get_config "logging.console" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") BE_QUIET=0; debug "Enabled console output from config" ;;
+        "false") BE_QUIET=1; debug "Disabled console output from config" ;;
+    esac
+    
+    # Mark configuration as loaded
+    LOG_CONFIG_LOADED=1
+    
+    debug "Logging configuration loaded successfully from config.sh"
+    return 0
+}
+
+# reload_log_config() - Reload logging configuration from config.sh
+#
+# Description:
+#   Forces a reload of logging configuration, useful when configuration
+#   has been updated during runtime.
+#
+# Returns:
+#   0 on success, 1 if config module not available
+#
+reload_log_config() {
+    LOG_CONFIG_LOADED=0
+    load_log_config
+}
 
 #
 # Internal Functions
@@ -442,11 +601,48 @@ ENVIRONMENT VARIABLES:
     BE_QUIET        Suppress console output: 1=quiet, 0=normal (default: 0)
     BE_VERBOSE      Enable verbose output: 1=verbose, 0=normal (default: 0)
 
+CONFIGURATION INTEGRATION (via config.sh):
+    logging.file           Log file path
+    logging.level          Log level (DEBUG, INFO, WARN, ERROR)
+    logging.time_format    Timestamp format string
+    logging.quiet          Quiet mode: true/false
+    logging.verbose        Verbose mode: true/false (sets level to DEBUG)
+    logging.console        Console output: true/false (opposite of quiet)
+
+CONFIGURATION PRIORITY (highest to lowest):
+    1. Command-line options (--log-level, etc.)
+    2. Environment variables (LOG_LEVEL, etc.)
+    3. Configuration files (logging.level, etc.)
+    4. Module defaults
+
 LOG LEVELS (in order of severity):
     DEBUG           Detailed diagnostic information (only shown when LOG_LEVEL=DEBUG)
     INFO            General informational messages (default minimum level)
     WARN            Warning conditions that don't prevent operation
     ERROR           Error conditions that may affect functionality
+
+CONFIGURATION EXAMPLES:
+    # Configuration file (INI format)
+    [logging]
+    level=DEBUG
+    file=/var/log/myapp.log
+    quiet=false
+    
+    # Configuration file (JSON format) 
+    {
+      "logging": {
+        "level": "INFO",
+        "file": "/var/log/myapp.log",
+        "console": true
+      }
+    }
+    
+    # Load and apply configuration
+    load_config "app.conf"
+    load_log_config
+    
+    # Reload configuration during runtime
+    reload_log_config
 EOF
 }
 
@@ -460,5 +656,9 @@ EOF
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     # Script is being sourced - process configuration options
     parse_log_options "${@}"
+    
+    # Automatically try to load configuration from config.sh if available
+    load_log_config || true
+    
     debug "Logging module loaded with immediate initialization"
 fi

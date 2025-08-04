@@ -14,6 +14,7 @@ This library provides modular, well-documented Bash utilities that follow contem
 |--------|---------|--------------|
 | **[lifecycle.sh](#lifecycle-module)** | Complete script lifecycle management | Single-instance enforcement, resource cleanup, lazy initialization |
 | **[log.sh](#logging-module)** | Enhanced logging system | Multi-level logging, file output, console control |
+| **[config.sh](#configuration-module)** | Configuration management | Multi-format support (INI/JSON/YAML), environment overrides, CLI integration |
 
 ## Quick Start
 
@@ -147,6 +148,170 @@ source lib/log.sh --log-file /var/log/app.log --log-level DEBUG --be-quiet
 LOG_FILE="/var/log/app.log" LOG_LEVEL=DEBUG source lib/log.sh
 ```
 
+## Configuration Module
+
+The config.sh module provides comprehensive configuration management with multi-source support.
+
+### Key Features
+
+- **Multi-Format Support**: INI, JSON, YAML configuration files (with graceful fallbacks)
+- **Priority-Based Loading**: CLI args > environment > config files > defaults
+- **Environment Integration**: Automatic environment variable mapping with prefixes/suffixes
+- **CLI Integration**: Command-line argument parsing with kebab-case conversion
+- **Type Conversion**: Automatic type conversion with validation (string, int, bool, array)
+- **Schema Validation**: Configuration validation against defined schemas
+- **Live Updates**: Runtime configuration updates with validation
+
+### Primary API
+
+```bash
+# Configuration loading and access
+load_config "app.conf"                           # Load configuration
+host="$(get_config "database.host" "localhost")"  # Get value with default
+port="$(get_config "database.port" "5432" "int")" # Get with type conversion
+enabled="$(get_config "feature.enabled" "false" "bool")" # Boolean conversion
+
+# Configuration modification
+set_config "database.timeout" "30"              # Set value
+validate_config                                  # Validate all configuration
+```
+
+### Configuration Sources (Priority Order)
+
+1. **Command-line arguments** (highest priority)
+2. **Environment variables** 
+3. **Configuration files** (loaded in order)
+4. **Schema defaults** (lowest priority)
+
+### Multi-Format File Support
+
+```bash
+# Load different configuration formats
+load_config "config.ini"     # INI format with [sections]
+load_config "config.json"    # JSON format (requires jq)
+load_config "config.yaml"    # YAML format (requires yq)
+
+# Multiple files with inheritance
+load_config "base.conf" "env.conf" "local.conf"
+```
+
+### Environment Variable Integration
+
+```bash
+# Automatic environment variable patterns
+export APP_DATABASE_HOST="db.example.com"        # → database.host
+export CONFIG_LOG_LEVEL="DEBUG"                  # → log.level  
+export MYAPP_FEATURE_ENABLED="true"              # → feature.enabled
+export DATABASE_CONFIG="/path/to/db.conf"        # → database.config
+
+# Custom prefixes and suffixes
+add_config_env_prefix "MYSERVICE_"    # Scan MYSERVICE_* variables
+add_config_env_suffix "_CFG"          # Scan *_CFG variables
+
+# Explicit mappings for precise control
+define_config_overrides env "DB_HOST" "database.host"
+define_config_overrides env "DB_PORT" "database.port"
+```
+
+### Command-Line Integration
+
+```bash
+# Traditional config prefix
+./script.sh --config-database.host=db.example.com --config-port=5432
+
+# Automatic kebab-case conversion  
+./script.sh --database-host=db.example.com --log-level=DEBUG
+
+# Short options (with explicit mapping)
+define_config_overrides short "-h" "database.host"
+./script.sh -h db.example.com
+
+# Mixed formats
+./script.sh --config-file app.conf --database-host=prod.db.com --verbose
+```
+
+### Configuration File Formats
+
+#### INI Format (.ini, .conf, .cfg)
+```ini
+# Basic key-value pairs
+debug=true
+timeout=30
+
+# Sections for hierarchical structure
+[database]
+host=localhost
+port=5432
+username=app_user
+
+[logging]
+level=INFO
+file=/var/log/app.log
+```
+
+#### JSON Format (.json)
+```json
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "ssl": true
+  },
+  "logging": {
+    "level": "INFO",
+    "console": true
+  }
+}
+```
+
+#### YAML Format (.yaml, .yml)  
+```yaml
+database:
+  host: localhost
+  port: 5432
+  ssl: true
+
+logging:
+  level: INFO
+  console: true
+```
+
+### Advanced Configuration Management
+
+```bash
+#!/usr/bin/env bash
+
+LIB_DIR="$(dirname "$(readlink -f "${0}")")/lib"
+source "${LIB_DIR}/config.sh"
+
+# Define custom environment mappings
+define_config_overrides env "DB_URL" "database.connection_string"
+define_config_overrides cli "--db-url" "database.connection_string"
+
+# Add custom prefixes for environment scanning
+add_config_env_prefix "MYAPP_"
+add_config_env_suffix "_CONFIG"
+
+# Parse command-line options first (highest priority)
+parse_config_options "$@"
+
+# Load configuration from multiple sources
+load_config "/etc/myapp/default.conf" "~/.myapp.conf" "./local.conf"
+
+# Access configuration with type conversion
+db_host="$(get_config "database.host" "localhost")"
+db_port="$(get_config "database.port" "5432" "int")"
+ssl_enabled="$(get_config "database.ssl" "false" "bool")"
+allowed_hosts="$(get_config "security.allowed_hosts" "" "array")"
+
+# Validate configuration
+if ! validate_config; then
+    die 1 "Configuration validation failed"
+fi
+
+log "Database: ${db_host}:${db_port} (SSL: ${ssl_enabled})"
+```
+
 ## Global Variables Reference
 
 ⚠️ **Important**: Review these global variables to avoid naming conflicts in your scripts.
@@ -183,11 +348,36 @@ LOG_FILE="/var/log/app.log" LOG_LEVEL=DEBUG source lib/log.sh
 - `BE_QUIET` - Suppress console output (1=quiet, 0=normal, default: 0)
 - `BE_VERBOSE` - Enable verbose output (1=verbose, 0=normal, default: 0)
 
+### Configuration Module (config.sh)
+
+#### Readonly Constants (Cannot be overwritten)
+- `CONFIG_OUT` - Output stream constant (value: "1")
+- `CONFIG_ERR` - Error stream constant (value: "2")
+- `CONFIG_MODULE_LOADED` - Module loaded marker (value: 1)
+
+#### Configuration Variables (Can be set by user)
+- `CONFIG_FILES` - Array of configuration file paths to load
+- `CONFIG_ENV_PREFIXES` - Space-separated prefixes to scan (default: "APP_ CONFIG_ MYAPP_")
+- `CONFIG_ENV_SUFFIXES` - Space-separated suffixes to scan (default: "_CONFIG")
+- `CONFIG_AUTO_TRANSFORM_KEYS` - Auto-transform key formats (1=yes, 0=no, default: 1)
+- `CONFIG_STRICT_MODE` - Strict validation (1=strict, 0=permissive, default: 1)
+- `CONFIG_ALLOW_UNDEFINED` - Allow undefined keys (1=yes, 0=no, default: 0)
+- `CONFIG_CASE_SENSITIVE` - Case-sensitive keys (1=yes, 0=no, default: 0)
+
+#### Internal State Variables (Should not be modified by user)
+- `CONFIG_VALUES` - Associative array storing configuration key-value pairs
+- `CONFIG_SOURCES` - Associative array tracking source of each configuration value
+- `CONFIG_TYPES` - Associative array storing type information for each key
+- `CONFIG_SCHEMA` - Associative array storing schema definitions
+- `CONFIG_ENV_MAPPINGS` - Environment variable to config key mappings
+- `CONFIG_CLI_MAPPINGS` - CLI argument to config key mappings
+- `CONFIG_CLI_SHORT_OPTS` - Short option to config key mappings
+
 ### ⚠️ Potential Conflicts and Warnings
 
 #### Variable Name Conflicts
-- **Avoid variables starting with**: `CLEANUP_`, `LOCK_`, `LOGGER_`, `LOG_`, `BE_`
-- **Arrays**: Don't modify `TO_BE_REMOVED` directly - use `add_cleanup_item()`/`remove_cleanup_item()`
+- **Avoid variables starting with**: `CLEANUP_`, `LOCK_`, `LOGGER_`, `LOG_`, `BE_`, `CONFIG_`
+- **Arrays**: Don't modify `TO_BE_REMOVED` or `CONFIG_*` arrays directly - use provided functions
 - **Function Names**: Avoid function names matching module functions
 
 #### Signal Trap Conflicts
@@ -341,6 +531,24 @@ fi
 
 # Combined options
 ./script.sh --log-file /var/log/app.log --log-level DEBUG --be-quiet
+```
+
+### Configuration Options
+
+```bash
+# Configuration file loading
+./script.sh --config-file /etc/myapp/config.conf --config-file ~/.myapp.conf
+
+# Configuration value overrides
+./script.sh --config-database.host=prod.db.com --config-port=5432
+
+# Automatic kebab-case conversion
+./script.sh --database-host=prod.db.com --log-level=DEBUG
+
+# Configuration behavior
+./script.sh --strict-config        # Enable strict validation
+./script.sh --permissive-config    # Enable permissive validation
+./script.sh --auto-transform-keys   # Enable automatic key transformation
 ```
 
 ### Environment Variables

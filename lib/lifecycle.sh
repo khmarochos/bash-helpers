@@ -103,7 +103,7 @@ fi
 # Default pattern: /tmp/${USER}-${script_name}.lock
 LOCK_FILE="${LOCK_FILE:-}"
 
-# Cleanup behavior configuration (numeric for performance)
+# Cleanup behavior configuration (numeric for performance, can be overridden by config.sh)
 CLEANUP_ON_SUCCESS="${CLEANUP_ON_SUCCESS:-1}"    # Cleanup on successful completion: 1=yes, 0=no
 CLEANUP_ON_ERROR="${CLEANUP_ON_ERROR:-1}"        # Cleanup on error/signal: 1=yes, 0=no
 STRICT_LOCK_CHECK="${STRICT_LOCK_CHECK:-1}"      # Strict PID validation: 1=strict, 0=permissive
@@ -117,6 +117,161 @@ declare -a TO_BE_REMOVED=()
 
 # Track whether cleanup traps have been installed (1 = installed, 0 = not installed)
 CLEANUP_TRAPS_INSTALLED="${CLEANUP_TRAPS_INSTALLED:-0}"
+
+# Configuration integration flag
+LIFECYCLE_CONFIG_LOADED="${LIFECYCLE_CONFIG_LOADED:-0}"   # Whether config.sh integration has been loaded
+
+#
+# Configuration Integration Functions
+#
+
+# _load_config_module() - Load config.sh module if available
+#
+# Description:
+#   Attempts to load the config.sh module for configuration integration.
+#   This function is called automatically by load_lifecycle_config().
+#
+# Returns:
+#   0 if config module is loaded or already available
+#   1 if config module cannot be found
+#
+# Global variables used:
+#   CONFIG_MODULE_LOADED - Set by config.sh module when loaded
+#
+_load_config_module() {
+    # Check if config module is already loaded
+    if [[ "${CONFIG_MODULE_LOADED:-0}" == "1" ]]; then
+        return 0
+    fi
+    
+    # Determine library directory relative to this script
+    local lib_dir
+    lib_dir="$(dirname "$(readlink -f "${BASH_SOURCE[1]}")")"
+    
+    # Path to the config module
+    local config_module_path="${lib_dir}/config.sh"
+    
+    # Check if config module exists and source it
+    if [[ -f "${config_module_path}" ]]; then
+        source "${config_module_path}"
+        return 0
+    else
+        # Config module not available, continue without it
+        return 1
+    fi
+}
+
+# load_lifecycle_config() - Load lifecycle configuration from config.sh
+#
+# Description:
+#   Integrates with config.sh to load lifecycle management parameters from
+#   configuration files, environment variables, and command-line arguments.
+#   This provides unified configuration approach across all modules.
+#
+# Configuration keys supported:
+#   lifecycle.lock_file        - Lock file path (LOCK_FILE)
+#   lifecycle.cleanup_on_success - Cleanup on success (CLEANUP_ON_SUCCESS)
+#   lifecycle.cleanup_on_error   - Cleanup on error (CLEANUP_ON_ERROR) 
+#   lifecycle.strict_lock_check  - Strict lock validation (STRICT_LOCK_CHECK)
+#   lifecycle.lock_timeout       - Lock wait timeout (LOCK_WAIT_TIMEOUT)
+#   lifecycle.auto_cleanup       - Enable automatic cleanup (both success and error)
+#
+# Returns:
+#   0 on success, 1 if config module not available
+#
+# Examples:
+#   load_lifecycle_config                      # Load from current config
+#   load_config "app.conf"; load_lifecycle_config  # Load config then apply to lifecycle
+#
+load_lifecycle_config() {
+    local config_value
+    
+    # Skip if already loaded
+    if [[ "${LIFECYCLE_CONFIG_LOADED}" == "1" ]]; then
+        debug "Lifecycle configuration already loaded from config.sh"
+        return 0
+    fi
+    
+    # Try to load config module
+    if ! _load_config_module; then
+        debug "Config module not available, using environment/direct configuration"
+        return 1
+    fi
+    
+    debug "Loading lifecycle configuration from config.sh"
+    
+    # Load lifecycle configuration values with fallbacks to current values
+    
+    # Lock file path
+    config_value="$(get_config "lifecycle.lock_file" "" 2>/dev/null)" || config_value=""
+    if [[ -n "${config_value}" ]]; then
+        LOCK_FILE="${config_value}"
+        debug "Set LOCK_FILE from config: ${LOCK_FILE}"
+    fi
+    
+    # Cleanup on success
+    config_value="$(get_config "lifecycle.cleanup_on_success" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") CLEANUP_ON_SUCCESS=1; debug "Enabled cleanup on success from config" ;;
+        "false") CLEANUP_ON_SUCCESS=0; debug "Disabled cleanup on success from config" ;;
+    esac
+    
+    # Cleanup on error
+    config_value="$(get_config "lifecycle.cleanup_on_error" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") CLEANUP_ON_ERROR=1; debug "Enabled cleanup on error from config" ;;
+        "false") CLEANUP_ON_ERROR=0; debug "Disabled cleanup on error from config" ;;
+    esac
+    
+    # Auto cleanup (convenience setting for both success and error)
+    config_value="$(get_config "lifecycle.auto_cleanup" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") 
+            CLEANUP_ON_SUCCESS=1
+            CLEANUP_ON_ERROR=1
+            debug "Enabled auto cleanup (success and error) from config"
+            ;;
+        "false") 
+            CLEANUP_ON_SUCCESS=0
+            CLEANUP_ON_ERROR=0
+            debug "Disabled auto cleanup from config"
+            ;;
+    esac
+    
+    # Strict lock check
+    config_value="$(get_config "lifecycle.strict_lock_check" "" "bool" 2>/dev/null)" || config_value=""
+    case "${config_value}" in
+        "true") STRICT_LOCK_CHECK=1; debug "Enabled strict lock check from config" ;;
+        "false") STRICT_LOCK_CHECK=0; debug "Disabled strict lock check from config" ;;
+    esac
+    
+    # Lock timeout
+    config_value="$(get_config "lifecycle.lock_timeout" "" "int" 2>/dev/null)" || config_value=""
+    if [[ -n "${config_value}" ]]; then
+        LOCK_WAIT_TIMEOUT="${config_value}"
+        debug "Set LOCK_WAIT_TIMEOUT from config: ${LOCK_WAIT_TIMEOUT}"
+    fi
+    
+    # Mark configuration as loaded
+    LIFECYCLE_CONFIG_LOADED=1
+    
+    debug "Lifecycle configuration loaded successfully from config.sh"
+    return 0
+}
+
+# reload_lifecycle_config() - Reload lifecycle configuration from config.sh
+#
+# Description:
+#   Forces a reload of lifecycle configuration, useful when configuration
+#   has been updated during runtime.
+#
+# Returns:
+#   0 on success, 1 if config module not available
+#
+reload_lifecycle_config() {
+    LIFECYCLE_CONFIG_LOADED=0
+    load_lifecycle_config
+}
 
 #
 # Private Functions
@@ -982,6 +1137,46 @@ ENVIRONMENT VARIABLES:
     STRICT_LOCK_CHECK   Strict lock validation: 1=strict, 0=permissive (default: 1)
     LOCK_WAIT_TIMEOUT   Lock wait timeout in seconds (default: 0)
 
+CONFIGURATION INTEGRATION (via config.sh):
+    lifecycle.lock_file         Lock file path
+    lifecycle.cleanup_on_success Cleanup on successful completion: true/false
+    lifecycle.cleanup_on_error   Cleanup on error/signal: true/false
+    lifecycle.auto_cleanup       Enable both success and error cleanup: true/false
+    lifecycle.strict_lock_check  Strict lock validation: true/false
+    lifecycle.lock_timeout       Lock wait timeout in seconds
+
+CONFIGURATION PRIORITY (highest to lowest):
+    1. Command-line options (--lock-file, etc.)
+    2. Environment variables (LOCK_FILE, etc.)
+    3. Configuration files (lifecycle.lock_file, etc.)
+    4. Module defaults
+
+CONFIGURATION EXAMPLES:
+    # Configuration file (INI format)
+    [lifecycle]
+    lock_file=/var/run/myapp.pid
+    auto_cleanup=true
+    strict_lock_check=false
+    lock_timeout=30
+    
+    # Configuration file (JSON format)
+    {
+      "lifecycle": {
+        "lock_file": "/var/run/myapp.pid",
+        "cleanup_on_success": true,
+        "cleanup_on_error": true,
+        "strict_lock_check": false
+      }
+    }
+    
+    # Load and apply configuration
+    load_config "app.conf"
+    load_lifecycle_config
+    ensure_single_instance
+    
+    # Reload configuration during runtime
+    reload_lifecycle_config
+
 EOF
 }
 
@@ -992,6 +1187,9 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     
     # Parse command-line options if provided
     parse_lifecycle_options "${@}"
+    
+    # Automatically try to load configuration from config.sh if available
+    load_lifecycle_config || true
     
     debug "Lifecycle module loaded (lazy initialization enabled)"
 fi
