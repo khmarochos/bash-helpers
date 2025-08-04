@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Early return if module already loaded
+[[ "${LIFECYCLE_MODULE_LOADED:-0}" == "1" ]] && return 0
+
 #
 # Complete Script Lifecycle Management Module for Bash Scripts
 #

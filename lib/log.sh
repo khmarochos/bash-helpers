@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Early return if module already loaded
+[[ "${LOG_MODULE_LOADED:-0}" == "1" ]] && return 0
+
 #
 # Enhanced Logging Module for Bash Scripts
 # 
