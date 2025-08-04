@@ -98,7 +98,7 @@ fi
 # Lock file path with intelligent defaults
 # Priority: explicit assignment > command-line option > environment variable > computed default
 # Default pattern: /tmp/${USER}-${script_name}.lock
-LOCK_FILE="${LOCK_FILE:-${LOCK_FILE_DEFAULT:-}}"
+LOCK_FILE="${LOCK_FILE:-}"
 
 # Cleanup behavior configuration (numeric for performance)
 CLEANUP_ON_SUCCESS="${CLEANUP_ON_SUCCESS:-1}"    # Cleanup on successful completion: 1=yes, 0=no
@@ -113,7 +113,7 @@ LOCK_WAIT_TIMEOUT="${LOCK_WAIT_TIMEOUT:-0}"      # Wait for lock timeout in seco
 declare -a TO_BE_REMOVED=()
 
 # Track whether cleanup traps have been installed (1 = installed, 0 = not installed)
-CLEANUP_TRAPS_INSTALLED=${CLEANUP_TRAPS_INSTALLED:-0}
+CLEANUP_TRAPS_INSTALLED="${CLEANUP_TRAPS_INSTALLED:-0}"
 
 #
 # Private Functions
@@ -136,7 +136,7 @@ CLEANUP_TRAPS_INSTALLED=${CLEANUP_TRAPS_INSTALLED:-0}
 _compute_default_lock_file() {
     local script_name
     script_name="$(basename "${0}" .sh)"
-    echo "/tmp/${USER}-${script_name}.lock"
+    echo "/tmp/${USER:-unknown}-${script_name}.lock"
 }
 
 # _ensure_lock_file() - Ensure LOCK_FILE variable is set with valid path
@@ -169,7 +169,7 @@ _ensure_lock_file() {
 #
 _load_logger() {
     # Check if logging module is already loaded
-    if ((LOG_MODULE_LOADED)); then
+    if [[ "${LOG_MODULE_LOADED:-0}" == "1" ]]; then
         return 0
     fi
     
@@ -203,7 +203,7 @@ _load_logger() {
 #   0 on success, exits script with code 1 on error
 #
 _remove_stale_lock() {
-    local lock_file="${1}"
+    local lock_file="${1:-}"
     
     rm -f "${lock_file:?}"
     if [[ $? -ne 0 ]]; then
@@ -256,7 +256,7 @@ _remove_stale_lock() {
 #   check_running
 #
 check_running() {
-    local run_lock="${1}"
+    local run_lock="${1:-}"
     
     # Use global LOCK_FILE if no parameter provided (lazy initialization)
     if [[ -z "${run_lock}" ]]; then
@@ -334,7 +334,7 @@ check_running() {
 #   create_lock
 #
 create_lock() {
-    local run_lock="${1}"
+    local run_lock="${1:-}"
     
     # Use global LOCK_FILE if no parameter provided (lazy initialization)
     if [[ -z "${run_lock}" ]]; then
@@ -386,7 +386,7 @@ create_lock() {
 #   add_cleanup_item "${output_file}"
 #
 add_cleanup_item() {
-    local item="${1}"
+    local item="${1:-}"
     
     # Validate input parameter
     if [[ -z "${item}" ]]; then
@@ -424,7 +424,7 @@ add_cleanup_item() {
 #   remove_cleanup_item "${temp_file}"
 #
 remove_cleanup_item() {
-    local target_item="${1}"
+    local target_item="${1:-}"
     local -a new_array=()
     local item
     local found=0  # 0 = not found, 1 = found
@@ -447,7 +447,7 @@ remove_cleanup_item() {
     # Update the global array
     TO_BE_REMOVED=("${new_array[@]}")
     
-    if ((found)); then
+    if [[ "${found}" == "1" ]]; then
         debug "Removed ${target_item} from cleanup list"
         return 0
     else
@@ -495,7 +495,7 @@ cleanup() {
     fi
     
     # Report cleanup completion
-    if ((cleanup_performed)); then
+    if [[ "${cleanup_performed}" == "1" ]]; then
         debug "Cleanup completed."
     fi
     
@@ -591,7 +591,7 @@ cleanup() {
 #   remove_lock_on_exit "${lock_file}"
 #
 ensure_single_instance() {
-    local lock_file="${1}"
+    local lock_file="${1:-}"
     
     debug "Starting complete single-instance setup"
     
@@ -632,7 +632,7 @@ ensure_single_instance() {
 #   die 2 "Database connection failed"
 #
 die() {
-    local exit_code="${1}"
+    local exit_code="${1:-}"
     
     # Validate exit code parameter
     if [[ ! "${exit_code}" =~ ^[0-9]+$ ]]; then
@@ -664,7 +664,7 @@ die() {
 #
 setup_cleanup_trap() {
     # Check if traps are already installed
-    if ((CLEANUP_TRAPS_INSTALLED)); then
+    if [[ "${CLEANUP_TRAPS_INSTALLED}" == "1" ]]; then
         return 0
     fi
     
@@ -707,7 +707,7 @@ setup_cleanup_trap() {
 #   remove_lock_on_exit  # Automatic cleanup
 #
 remove_lock_on_exit() {
-    local lock_file="${1}"
+    local lock_file="${1:-}"
     
     # Use global LOCK_FILE if no parameter provided (lazy initialization)
     if [[ -z "${lock_file}" ]]; then
