@@ -295,7 +295,7 @@ check_running() {
     
     # Check if process is still running
     local process_comm
-    process_comm="$(ps -p "${suspicious_pid}" -o comm= 2>/dev/null)"
+    process_comm="$(ps -p "${suspicious_pid}" -o comm= 2>/dev/null || true)"
     if [[ -z "${process_comm}" ]]; then
         warn "Process with ID mentioned in ${run_lock} (${suspicious_pid}) doesn't exist."
         warn "${run_lock} seems to be stalled, it will be removed."
