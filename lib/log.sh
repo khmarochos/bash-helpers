@@ -351,6 +351,131 @@ debug() {
     fi
 }
 
+# form_section_header() - Format a section header with borders
+#
+# Description:
+#   Formats a consistently styled section header with configurable border styles.
+#   Returns the formatted text as a string for the caller to output.
+#
+# Input:
+#   $1 - Section title text
+#   $2 - Optional header style: "major", "normal", "minor", "subsection", "completion", "warning", "error", "info"
+#
+# Output:
+#   Formatted header text to stdout (for command substitution)
+#
+# Global variables read:
+#   None
+#
+# Global variables modified:
+#   None
+#
+# Example:
+#   log "$(form_section_header "Step 1: Initialization" "major")"
+#   echo "$(form_section_header "Processing" "minor")"
+form_section_header() {
+    local title="${1}"
+    local style="${2:-normal}"
+    local border_width=72
+    local result=""
+    
+    # Helper function to calculate padding for centering text
+    # Inputs: $1 - text to center
+    # Outputs: Prints "padding_left padding_right" to stdout
+    calculate_padding() {
+        local text="${1}"
+        local text_length=${#text}
+        local total_padding=$(( border_width - text_length - 2 ))
+        local padding_left=$(( total_padding / 2 ))
+        local padding_right=$(( total_padding / 2 ))
+        # Handle odd-length padding
+        if (( total_padding % 2 == 1 )); then
+            padding_right=$((padding_right + 1))
+        fi
+        echo "${padding_left} ${padding_right}"
+    }
+    
+    # Helper function to generate a border line
+    # Inputs: $1 - left corner, $2 - line character, $3 - right corner
+    # Outputs: Complete border line to stdout
+    generate_border() {
+        local left_corner="${1}"
+        local line_char="${2}"
+        local right_corner="${3}"
+        local line_length=$(( border_width - 2 ))  # Subtract corners
+        
+        printf "%s" "${left_corner}"
+        # Use a loop to handle multi-byte characters properly
+        for ((i=0; i<line_length; i++)); do
+            printf "%s" "${line_char}"
+        done
+        printf "%s" "${right_corner}"
+    }
+    
+    # Helper function to format a box with borders
+    # Inputs: $1 - top left, $2 - top line, $3 - top right,
+    #         $4 - side char, $5 - bottom left, $6 - bottom line, 
+    #         $7 - bottom right, $8 - text to display
+    format_box() {
+        local top_left="${1}"
+        local top_line="${2}"
+        local top_right="${3}"
+        local left_line="${4}"
+        local right_line="${5}"
+        local bottom_left="${6}"
+        local bottom_line="${7}"
+        local bottom_right="${8}"
+        local text="${9}"
+        
+        # Get padding values from calculate_padding function
+        local padding_values
+        padding_values=$(calculate_padding "${text}")
+        local padding_left padding_right
+        read -r padding_left padding_right <<< "${padding_values}"
+        
+        local output=""
+        
+        # Generate borders
+        if [[ ${#top_left} -gt 0 ]] && [[ ${#top_right} -gt 0 ]] && [[ ${#top_line} -gt 0 ]]; then
+            output+="$(generate_border "${top_left}" "${top_line}" "${top_right}")"$'\n'
+        fi
+        output+="${left_line}$(printf "%${padding_left}s" "")${text}$(printf "%${padding_right}s" "")${right_line}"
+        if [[ ${#bottom_left} -gt 0 ]] && [[ ${#bottom_right} -gt 0 ]] && [[ ${#bottom_line} -gt 0 ]]; then
+            output+=$'\n'"$(generate_border "${bottom_left}" "${bottom_line}" "${bottom_right}")"
+        fi
+        
+        echo "${output}"
+    }
+    
+    # Add empty line before header
+    result+=$'\n'
+    
+    case "${style}" in
+        completion)
+            # Double line box with check marks and centered title
+            result+="$(format_box "┏" "━" "┓" "┃" "┃" "┗" "━" "┛" "✓ ${title} ✓")"
+            ;;
+        major)
+            # Double line box with centered title
+            result+="$(format_box "╔" "═" "╗" "║" "║" "╚" "═" "╝" "${title}")"
+            ;;
+        normal)
+            # Single line box with centered title
+            result+="$(format_box "┌" "─" "┐" "│" "│" "└" "─" "┘" "${title}")"
+            ;;
+        minor)
+            # Dotted line box with centered title
+            result+="$(format_box "┌" "╌" "┐" "╎" "╎" "└" "╌" "┘" "${title}")"
+            ;;
+        subsection|*)
+            # Simple header for subsections - no box
+            result+="$(format_box " " " " " " "▶" "◀" " " " " " " "${title}")"
+            ;;
+    esac
+    
+    echo "${result}"
+}
+
 # parse_log_options() - Parse command-line options for logging configuration
 #
 # Description:
@@ -425,8 +550,7 @@ parse_log_options() {
 #   show_log_help
 show_log_help() {
     cat <<EOF
-Logging Module Help
-===================
+$(form_section_header "Logging Module Help")
 
 COMMAND-LINE OPTIONS:
         --log-file FILE             Set log file path

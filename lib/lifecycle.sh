@@ -962,18 +962,17 @@ parse_lifecycle_options() {
 #
 show_lifecycle_help() {
     cat <<EOF
-Script Lifecycle Management Module Help
-=======================================
+$(form_section_header "Script Lifecycle Management Module Help")
 
 COMMAND-LINE OPTIONS:
-    --lock-file FILE            Set custom lock file path
-    --lock-timeout SECONDS      Wait timeout for lock acquisition (0=no wait)
-    --cleanup-on-success        Enable cleanup on successful completion (default)
-    --no-cleanup-on-success     Disable cleanup on successful completion
-    --cleanup-on-error          Enable cleanup on error/signal (default)
-    --no-cleanup-on-error       Disable cleanup on error/signal
-    --strict-lock               Enable strict PID validation (default)
-    --permissive-lock           Enable permissive lock handling
+        --lock-file FILE            Set custom lock file path
+        --lock-timeout SECONDS      Wait timeout for lock acquisition (0=no wait)
+        --cleanup-on-success        Enable cleanup on successful completion (default)
+        --no-cleanup-on-success     Disable cleanup on successful completion
+        --cleanup-on-error          Enable cleanup on error/signal (default)
+        --no-cleanup-on-error       Disable cleanup on error/signal
+        --strict-lock               Enable strict PID validation (default)
+        --permissive-lock           Enable permissive lock handling
 
 ENVIRONMENT VARIABLES:
     LOCK_FILE           Path to lock file (default: /tmp/\${USER}-\${script}.lock)
