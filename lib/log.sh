@@ -379,19 +379,15 @@ form_section_header() {
     local border_width=72
     local result=""
     
-    # Helper function to calculate padding for centering text
-    # Inputs: $1 - text to center
+    # Helper function to calculate padding for left-aligned text
+    # Inputs: $1 - text to align
     # Outputs: Prints "padding_left padding_right" to stdout
     calculate_padding() {
         local text="${1}"
         local text_length=${#text}
         local total_padding=$(( border_width - text_length - 2 ))
-        local padding_left=$(( total_padding / 2 ))
-        local padding_right=$(( total_padding / 2 ))
-        # Handle odd-length padding
-        if (( total_padding % 2 == 1 )); then
-            padding_right=$((padding_right + 1))
-        fi
+        local padding_left=1  # Fixed left padding for left alignment
+        local padding_right=$(( total_padding - padding_left ))
         echo "${padding_left} ${padding_right}"
     }
     
